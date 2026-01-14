@@ -1,11 +1,13 @@
 # gogo
 
+[![GitHub release](https://img.shields.io/github/v/release/sirsjg/gogo)](https://github.com/sirsjg/gogo/releases) [![Go Report Card](https://goreportcard.com/badge/github.com/sirsjg/gogo)](https://goreportcard.com/report/github.com/sirsjg/gogo) [![Build Status](https://github.com/sirsjg/gogo/workflows/CI/badge.svg)](https://github.com/sirsjg/gogo/actions) ![Go Version](https://img.shields.io/github/go-mod/go-version/sirsjg/gogo) ![macOS](https://img.shields.io/badge/macOS-000000?style=flat&logo=apple&logoColor=white) ![Linux](https://img.shields.io/badge/Linux-FCC624?style=flat&logo=linux&logoColor=black) [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+
 Minimal CLI for streaming LLM responses. One prompt in, tokens out. No chat history, no frills.
 
 ## Install
 
 ```sh
-brew install sirsjg/gogo
+brew tap sirsjg/gogo
 brew install gogo
 ```
 
@@ -29,6 +31,7 @@ cat file.go | gogo -P gemini -p "Review this code"
 -t, --timeout <duration>  Request timeout (e.g., 30s, 1m)
 -d, --debug               Enable verbose stderr logging
 -v, --version             Print version and exit
+-u, --update              Check for updates
 -h, --help                Show help message
 ```
 
