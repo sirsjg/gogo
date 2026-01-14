@@ -7,6 +7,7 @@ import (
 	"os"
 
 	"gogo/internal/config"
+	"gogo/internal/plugin"
 	"gogo/internal/prompt"
 	"gogo/internal/provider"
 	"gogo/internal/update"
@@ -122,6 +123,13 @@ func main() {
 		os.Exit(1)
 	}
 
+	// Load plugins (tools)
+	tools, err := plugin.LoadWithBuiltins()
+	if err != nil {
+		fmt.Fprintln(stderr, "plugin error:", err)
+		os.Exit(1)
+	}
+
 	ctx := context.Background()
 	if cfg.Timeout > 0 {
 		var cancel context.CancelFunc
@@ -129,7 +137,7 @@ func main() {
 		defer cancel()
 	}
 
-	client := provider.NewClient(cfg, stderr)
+	client := provider.NewClient(cfg, stderr, tools)
 	if err := client.Stream(ctx, promptText, os.Stdout); err != nil {
 		fmt.Fprintln(stderr, "provider error:", err)
 		os.Exit(1)

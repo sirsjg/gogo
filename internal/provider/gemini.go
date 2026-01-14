@@ -12,8 +12,8 @@ import (
 	"os"
 
 	"gogo/internal/config"
+	"gogo/internal/plugin"
 	"gogo/internal/stream"
-	"gogo/internal/tool"
 )
 
 const geminiBase = "https://generativelanguage.googleapis.com/v1beta/models/"
@@ -68,7 +68,7 @@ type geminiEvent struct {
 	} `json:"candidates"`
 }
 
-func streamGemini(ctx context.Context, cfg config.Config, prompt string, out io.Writer, stderr io.Writer) error {
+func streamGemini(ctx context.Context, cfg config.Config, prompt string, out io.Writer, stderr io.Writer, tools *plugin.Registry) error {
 	key := os.Getenv("GEMINI_API_KEY")
 	if key == "" {
 		key = os.Getenv("GOOGLE_API_KEY")
@@ -81,11 +81,11 @@ func streamGemini(ctx context.Context, cfg config.Config, prompt string, out io.
 		{Role: "user", Parts: []geminiPart{{Text: prompt}}},
 	}
 
-	return geminiStreamLoop(ctx, cfg, key, contents, out, stderr)
+	return geminiStreamLoop(ctx, cfg, key, contents, out, stderr, tools)
 }
 
-func geminiStreamLoop(ctx context.Context, cfg config.Config, key string, contents []geminiContent, out io.Writer, stderr io.Writer) error {
-	calls, err := geminiStreamOnce(ctx, cfg, key, contents, out)
+func geminiStreamLoop(ctx context.Context, cfg config.Config, key string, contents []geminiContent, out io.Writer, stderr io.Writer, tools *plugin.Registry) error {
+	calls, err := geminiStreamOnce(ctx, cfg, key, contents, out, tools)
 	if err != nil {
 		return err
 	}
@@ -95,16 +95,13 @@ func geminiStreamLoop(ctx context.Context, cfg config.Config, key string, conten
 
 	responses := make([]geminiPart, 0, len(calls))
 	for _, call := range calls {
-		if call.Name != "fs" {
+		// Check if the tool exists in the registry
+		if _, ok := tools.Get(call.Name); !ok {
 			continue
 		}
 		reqBytes, _ := json.Marshal(call.Args)
-		var req tool.FSRequest
-		if err := json.Unmarshal(reqBytes, &req); err != nil {
-			continue
-		}
-		res := tool.FS(req)
-		logTool(stderr, "gemini", req, res)
+		res := tools.ExecuteTool(call.Name, reqBytes)
+		logToolResult(stderr, "gemini", call.Name, string(reqBytes), res)
 		responses = append(responses, geminiPart{
 			FunctionResponse: &geminiFunctionResponse{
 				Name:     call.Name,
@@ -118,11 +115,11 @@ func geminiStreamLoop(ctx context.Context, cfg config.Config, key string, conten
 
 	next := append([]geminiContent{}, contents...)
 	next = append(next, geminiContent{Role: "function", Parts: responses})
-	_, err = geminiStreamOnce(ctx, cfg, key, next, out)
+	_, err = geminiStreamOnce(ctx, cfg, key, next, out, tools)
 	return err
 }
 
-func geminiStreamOnce(ctx context.Context, cfg config.Config, key string, contents []geminiContent, out io.Writer) ([]geminiFunctionCall, error) {
+func geminiStreamOnce(ctx context.Context, cfg config.Config, key string, contents []geminiContent, out io.Writer, tools *plugin.Registry) ([]geminiFunctionCall, error) {
 	reqBody := geminiRequest{
 		Contents: contents,
 	}
@@ -135,28 +132,22 @@ func geminiStreamOnce(ctx context.Context, cfg config.Config, key string, conten
 			reqBody.GenerationConfig["temperature"] = cfg.Temperature
 		}
 	}
+	// Build function declarations from the tool registry
+	funcDecls := make([]geminiFunctionDecl, 0)
+	for _, def := range tools.GetToolDefs() {
+		funcDecls = append(funcDecls, geminiFunctionDecl{
+			Name:        def.Name,
+			Description: def.Description,
+			Parameters:  def.InputSchema,
+		})
+	}
 	reqBody.Tools = []geminiTool{
 		{
-			FunctionDeclarations: []geminiFunctionDecl{
-				{
-					Name:        "fs",
-					Description: "Filesystem operations (read/write/append/delete/mkdir/rmdir/list/stat/move/copy)",
-					Parameters: map[string]interface{}{
-						"type": "object",
-						"properties": map[string]interface{}{
-							"op":   map[string]string{"type": "string"},
-							"path": map[string]string{"type": "string"},
-							"data": map[string]string{"type": "string"},
-							"dest": map[string]string{"type": "string"},
-						},
-						"required": []string{"op", "path"},
-					},
-				},
-			},
+			FunctionDeclarations: funcDecls,
 		},
 	}
 	reqBody.SystemInstruction = &geminiSystem{
-		Parts: []geminiPart{{Text: fsInstruction()}},
+		Parts: []geminiPart{{Text: tools.GenerateInstruction()}},
 	}
 
 	b, err := json.Marshal(reqBody)

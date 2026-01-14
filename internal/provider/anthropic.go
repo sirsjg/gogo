@@ -10,8 +10,8 @@ import (
 	"net/http"
 
 	"gogo/internal/config"
+	"gogo/internal/plugin"
 	"gogo/internal/stream"
-	"gogo/internal/tool"
 )
 
 const anthropicURL = "https://api.anthropic.com/v1/messages"
@@ -56,7 +56,7 @@ type toolUse struct {
 	Input string
 }
 
-func streamAnthropic(ctx context.Context, cfg config.Config, prompt string, out io.Writer, stderr io.Writer) error {
+func streamAnthropic(ctx context.Context, cfg config.Config, prompt string, out io.Writer, stderr io.Writer, tools *plugin.Registry) error {
 	key, err := apiKey("ANTHROPIC_API_KEY")
 	if err != nil {
 		return err
@@ -71,11 +71,11 @@ func streamAnthropic(ctx context.Context, cfg config.Config, prompt string, out 
 		},
 	}
 
-	return anthropicStreamLoop(ctx, cfg, key, messages, out, stderr)
+	return anthropicStreamLoop(ctx, cfg, key, messages, out, stderr, tools)
 }
 
-func anthropicStreamLoop(ctx context.Context, cfg config.Config, key string, messages []map[string]interface{}, out io.Writer, stderr io.Writer) error {
-	toolUses, err := anthropicStreamOnce(ctx, cfg, key, messages, out)
+func anthropicStreamLoop(ctx context.Context, cfg config.Config, key string, messages []map[string]interface{}, out io.Writer, stderr io.Writer, tools *plugin.Registry) error {
+	toolUses, err := anthropicStreamOnce(ctx, cfg, key, messages, out, tools)
 	if err != nil {
 		return err
 	}
@@ -85,19 +85,16 @@ func anthropicStreamLoop(ctx context.Context, cfg config.Config, key string, mes
 
 	toolResults := make([]map[string]interface{}, 0, len(toolUses))
 	for _, use := range toolUses {
-		if use.Name != "fs" {
+		// Check if the tool exists in the registry
+		if _, ok := tools.Get(use.Name); !ok {
 			continue
 		}
-		var req tool.FSRequest
-		if err := json.Unmarshal([]byte(use.Input), &req); err != nil {
-			continue
-		}
-		res := tool.FS(req)
-		logTool(stderr, "anthropic", req, res)
+		res := tools.ExecuteTool(use.Name, []byte(use.Input))
+		logToolResult(stderr, "anthropic", use.Name, use.Input, res)
 		toolResults = append(toolResults, map[string]interface{}{
 			"type":        "tool_result",
 			"tool_use_id": use.ID,
-			"content":     []map[string]string{{"type": "text", "text": toJSON(res)}},
+			"content":     []map[string]string{{"type": "text", "text": res.ToJSON()}},
 		})
 	}
 
@@ -110,11 +107,11 @@ func anthropicStreamLoop(ctx context.Context, cfg config.Config, key string, mes
 		"role":    "user",
 		"content": toolResults,
 	})
-	_, err = anthropicStreamOnce(ctx, cfg, key, next, out)
+	_, err = anthropicStreamOnce(ctx, cfg, key, next, out, tools)
 	return err
 }
 
-func anthropicStreamOnce(ctx context.Context, cfg config.Config, key string, messages []map[string]interface{}, out io.Writer) ([]toolUse, error) {
+func anthropicStreamOnce(ctx context.Context, cfg config.Config, key string, messages []map[string]interface{}, out io.Writer, tools *plugin.Registry) ([]toolUse, error) {
 	reqBody := anthropicRequest{
 		Model:       cfg.Model,
 		MaxTokens:   cfg.MaxTokens,
@@ -122,24 +119,8 @@ func anthropicStreamOnce(ctx context.Context, cfg config.Config, key string, mes
 		Stream:      true,
 		Messages:    messages,
 	}
-	reqBody.System = fsInstruction()
-
-	reqBody.Tools = []map[string]interface{}{
-		{
-			"name":        "fs",
-			"description": "Filesystem operations (read/write/append/delete/mkdir/rmdir/list/stat/move/copy)",
-			"input_schema": map[string]interface{}{
-				"type": "object",
-				"properties": map[string]interface{}{
-					"op":   map[string]string{"type": "string"},
-					"path": map[string]string{"type": "string"},
-					"data": map[string]string{"type": "string"},
-					"dest": map[string]string{"type": "string"},
-				},
-				"required": []string{"op", "path"},
-			},
-		},
-	}
+	reqBody.System = tools.GenerateInstruction()
+	reqBody.Tools = tools.FormatAnthropicTools()
 
 	b, err := json.Marshal(reqBody)
 	if err != nil {

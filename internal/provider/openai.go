@@ -10,8 +10,8 @@ import (
 	"net/http"
 
 	"gogo/internal/config"
+	"gogo/internal/plugin"
 	"gogo/internal/stream"
-	"gogo/internal/tool"
 )
 
 const openAIURL = "https://api.openai.com/v1/responses"
@@ -65,7 +65,7 @@ type toolCall struct {
 	Arguments string
 }
 
-func streamOpenAI(ctx context.Context, cfg config.Config, prompt string, out io.Writer, stderr io.Writer) error {
+func streamOpenAI(ctx context.Context, cfg config.Config, prompt string, out io.Writer, stderr io.Writer, tools *plugin.Registry) error {
 	key, err := apiKey("OPENAI_API_KEY")
 	if err != nil {
 		return err
@@ -75,7 +75,7 @@ func streamOpenAI(ctx context.Context, cfg config.Config, prompt string, out io.
 		map[string]any{
 			"role": "system",
 			"content": []map[string]string{
-				{"type": "input_text", "text": fsInstruction()},
+				{"type": "input_text", "text": tools.GenerateInstruction()},
 			},
 		},
 		map[string]any{
@@ -86,11 +86,11 @@ func streamOpenAI(ctx context.Context, cfg config.Config, prompt string, out io.
 		},
 	}
 
-	return openAIStreamLoop(ctx, cfg, key, input, out, stderr)
+	return openAIStreamLoop(ctx, cfg, key, input, out, stderr, tools)
 }
 
-func openAIStreamLoop(ctx context.Context, cfg config.Config, key string, input []any, out io.Writer, stderr io.Writer) error {
-	toolCalls, responseID, err := openAIStreamOnce(ctx, cfg, key, input, out, "")
+func openAIStreamLoop(ctx context.Context, cfg config.Config, key string, input []any, out io.Writer, stderr io.Writer, tools *plugin.Registry) error {
+	toolCalls, responseID, err := openAIStreamOnce(ctx, cfg, key, input, out, "", tools)
 	if err != nil {
 		return err
 	}
@@ -101,20 +101,16 @@ func openAIStreamLoop(ctx context.Context, cfg config.Config, key string, input 
 
 	toolMessages := make([]any, 0, len(toolCalls))
 	for _, call := range toolCalls {
-		if call.Name != "fs" {
+		// Check if the tool exists in the registry
+		if _, ok := tools.Get(call.Name); !ok {
 			continue
 		}
-		var req tool.FSRequest
-		if err := json.Unmarshal([]byte(call.Arguments), &req); err != nil {
-			continue
-		}
-		res := tool.FS(req)
-		logTool(stderr, "openai", req, res)
-		b, _ := json.Marshal(res)
+		res := tools.ExecuteTool(call.Name, []byte(call.Arguments))
+		logToolResult(stderr, "openai", call.Name, call.Arguments, res)
 		toolMessages = append(toolMessages, map[string]any{
 			"type":    "function_call_output",
 			"call_id": call.CallID,
-			"output":  string(b),
+			"output":  res.ToJSON(),
 		})
 	}
 
@@ -122,11 +118,11 @@ func openAIStreamLoop(ctx context.Context, cfg config.Config, key string, input 
 		return nil
 	}
 
-	_, _, err = openAIStreamOnce(ctx, cfg, key, toolMessages, out, responseID)
+	_, _, err = openAIStreamOnce(ctx, cfg, key, toolMessages, out, responseID, tools)
 	return err
 }
 
-func openAIStreamOnce(ctx context.Context, cfg config.Config, key string, input []any, out io.Writer, previousID string) ([]toolCall, string, error) {
+func openAIStreamOnce(ctx context.Context, cfg config.Config, key string, input []any, out io.Writer, previousID string, tools *plugin.Registry) ([]toolCall, string, error) {
 	reqBody := openAIRequest{
 		Model:              cfg.Model,
 		Input:              input,
@@ -134,24 +130,8 @@ func openAIStreamOnce(ctx context.Context, cfg config.Config, key string, input 
 		Temperature:        cfg.Temperature,
 		Stream:             true,
 		PreviousResponseID: previousID,
-		Tools: []map[string]any{
-			{
-				"type":        "function",
-				"name":        "fs",
-				"description": "Filesystem operations (read/write/append/delete/mkdir/rmdir/list/stat/move/copy)",
-				"parameters": map[string]any{
-					"type": "object",
-					"properties": map[string]any{
-						"op":   map[string]string{"type": "string"},
-						"path": map[string]string{"type": "string"},
-						"data": map[string]string{"type": "string"},
-						"dest": map[string]string{"type": "string"},
-					},
-					"required": []string{"op", "path"},
-				},
-			},
-		},
-		ToolChoice: "auto",
+		Tools:              tools.FormatOpenAITools(),
+		ToolChoice:         "auto",
 	}
 
 	b, err := json.Marshal(reqBody)

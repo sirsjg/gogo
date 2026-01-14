@@ -4,10 +4,11 @@ import (
 	"fmt"
 	"io"
 
-	"gogo/internal/tool"
+	"gogo/internal/plugin"
 )
 
-func logTool(w io.Writer, provider string, req tool.FSRequest, res tool.FSResult) {
+// logToolResult logs tool execution for any tool type.
+func logToolResult(w io.Writer, provider string, toolName string, input string, res plugin.Result) {
 	if w == nil {
 		return
 	}
@@ -15,5 +16,9 @@ func logTool(w io.Writer, provider string, req tool.FSRequest, res tool.FSResult
 	if errText == "" {
 		errText = "-"
 	}
-	fmt.Fprintf(w, "tool fs provider=%s op=%s path=%s ok=%t err=%s\n", provider, req.Op, req.Path, res.OK, errText)
+	// Truncate input if too long for logging
+	if len(input) > 100 {
+		input = input[:97] + "..."
+	}
+	fmt.Fprintf(w, "tool %s provider=%s ok=%t err=%s input=%s\n", toolName, provider, res.OK, errText, input)
 }
