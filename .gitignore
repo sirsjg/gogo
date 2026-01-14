@@ -1,0 +1,14 @@
+# Binary
+gogo
+
+# Test
+*.test
+coverage.out
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# OS
+.DS_Store
