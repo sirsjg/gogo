@@ -11,7 +11,12 @@ import (
 	"gogo/internal/provider"
 )
 
-const version = "0.1.0"
+// Version info injected by goreleaser ldflags
+var (
+	version = "dev"
+	commit  = "none"
+	date    = "unknown"
+)
 
 func printUsage() {
 	fmt.Fprintf(os.Stderr, `gogo %s - streaming LLM CLI
