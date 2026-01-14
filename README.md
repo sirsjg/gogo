@@ -62,6 +62,23 @@ Location: `~/.config/gogo/config.json`
 }
 ```
 
+## Tools
+
+The LLM has access to a filesystem tool (`fs`) for local file operations:
+
+| Operation | Description |
+|-----------|-------------|
+| `read`    | Read file contents |
+| `write`   | Create or overwrite a file |
+| `append`  | Append to a file |
+| `delete`  | Remove file or directory recursively |
+| `mkdir`   | Create directory (with parents) |
+| `rmdir`   | Remove empty directory |
+| `list`    | List directory contents |
+| `stat`    | Get file/directory info |
+| `move`    | Rename or move a path |
+| `copy`    | Copy a file |
+
 ## I/O Contract
 
 - **stdout**: LLM output only (machine-consumable)
