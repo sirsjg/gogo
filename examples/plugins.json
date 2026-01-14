@@ -1,0 +1,121 @@
+{
+  "tools": [
+    {
+      "name": "weather",
+      "description": "Get current weather for a location. Returns temperature, conditions, and humidity.",
+      "type": "http",
+      "url": "https://api.openweathermap.org/data/2.5/weather?q={{.location}}&appid=$OPENWEATHER_API_KEY&units=metric",
+      "method": "GET",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "location": {
+            "type": "string",
+            "description": "City name, e.g., 'London' or 'New York,US'"
+          }
+        },
+        "required": ["location"]
+      },
+      "timeout_ms": 10000
+    },
+    {
+      "name": "github-issue",
+      "description": "Create a GitHub issue in a repository",
+      "type": "http",
+      "url": "https://api.github.com/repos/{{.owner}}/{{.repo}}/issues",
+      "method": "POST",
+      "headers": {
+        "Authorization": "Bearer $GITHUB_TOKEN",
+        "Accept": "application/vnd.github+json"
+      },
+      "body": "{\"title\": \"{{.title}}\", \"body\": \"{{.body}}\"}",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "owner": {
+            "type": "string",
+            "description": "Repository owner (user or organization)"
+          },
+          "repo": {
+            "type": "string",
+            "description": "Repository name"
+          },
+          "title": {
+            "type": "string",
+            "description": "Issue title"
+          },
+          "body": {
+            "type": "string",
+            "description": "Issue body/description"
+          }
+        },
+        "required": ["owner", "repo", "title"]
+      }
+    },
+    {
+      "name": "slack-message",
+      "description": "Send a message to a Slack channel via webhook",
+      "type": "http",
+      "url": "$SLACK_WEBHOOK_URL",
+      "method": "POST",
+      "headers": {
+        "Content-Type": "application/json"
+      },
+      "body": "{\"text\": \"{{.message}}\", \"channel\": \"{{.channel}}\"}",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "message": {
+            "type": "string",
+            "description": "Message text to send"
+          },
+          "channel": {
+            "type": "string",
+            "description": "Channel name (e.g., #general)"
+          }
+        },
+        "required": ["message"]
+      }
+    },
+    {
+      "name": "run-script",
+      "description": "Execute a shell script and return its output",
+      "type": "exec",
+      "command": "/bin/bash",
+      "args": ["-c", "{{.script}}"],
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "script": {
+            "type": "string",
+            "description": "Bash script to execute"
+          }
+        },
+        "required": ["script"]
+      },
+      "timeout_ms": 30000
+    },
+    {
+      "name": "docker-run",
+      "description": "Run a Docker container with specified image and command",
+      "type": "exec",
+      "command": "docker",
+      "args": ["run", "--rm", "{{.image}}", "{{.command}}"],
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "image": {
+            "type": "string",
+            "description": "Docker image to run"
+          },
+          "command": {
+            "type": "string",
+            "description": "Command to execute in the container"
+          }
+        },
+        "required": ["image"]
+      },
+      "timeout_ms": 60000
+    }
+  ]
+}

@@ -64,20 +64,59 @@ Location: `~/.config/gogo/config.json`
 
 ## Tools
 
-The LLM has access to a filesystem tool (`fs`) for local file operations:
+The LLM can use the `fs` tool for local file operations: `read`, `write`, `append`, `delete`, `mkdir`, `rmdir`, `list`, `stat`, `move`, `copy`.
 
-| Operation | Description |
-|-----------|-------------|
-| `read`    | Read file contents |
-| `write`   | Create or overwrite a file |
-| `append`  | Append to a file |
-| `delete`  | Remove file or directory recursively |
-| `mkdir`   | Create directory (with parents) |
-| `rmdir`   | Remove empty directory |
-| `list`    | List directory contents |
-| `stat`    | Get file/directory info |
-| `move`    | Rename or move a path |
-| `copy`    | Copy a file |
+### Custom Plugins
+
+Add your own tools via `~/.config/gogo/plugins.json`:
+
+```json
+{
+  "tools": [
+    {
+      "name": "weather",
+      "description": "Get current weather for a location",
+      "type": "http",
+      "url": "https://api.example.com/weather?city={{.location}}",
+      "method": "GET",
+      "headers": {
+        "Authorization": "Bearer $API_KEY"
+      },
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "location": {"type": "string", "description": "City name"}
+        },
+        "required": ["location"]
+      }
+    },
+    {
+      "name": "run-script",
+      "description": "Execute a shell script",
+      "type": "exec",
+      "command": "/bin/bash",
+      "args": ["-c", "{{.script}}"],
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "script": {"type": "string", "description": "Script to run"}
+        },
+        "required": ["script"]
+      }
+    }
+  ]
+}
+```
+
+**Plugin Types:**
+- `http`: Make HTTP/API calls with templated URLs, headers, and bodies
+- `exec`: Execute local commands with templated arguments
+
+**Template Variables:**
+- `{{.field}}` - Substitutes input field values
+- `$ENV_VAR` - Substitutes environment variables (in URLs and headers)
+
+See `examples/plugins.json` for more examples.
 
 ## I/O Contract
 
