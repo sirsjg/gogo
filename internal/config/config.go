@@ -18,6 +18,7 @@ type Flags struct {
 	ConfigPath  string
 	Timeout     time.Duration
 	Version     bool
+	Update      bool
 	Debug       bool
 }
 

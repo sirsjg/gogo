@@ -9,6 +9,7 @@ import (
 	"gogo/internal/config"
 	"gogo/internal/prompt"
 	"gogo/internal/provider"
+	"gogo/internal/update"
 )
 
 // Version info injected by goreleaser ldflags
@@ -33,6 +34,7 @@ Options:
   -t, --timeout <duration>  Request timeout (e.g., 30s, 1m)
   -d, --debug               Enable verbose stderr logging
   -v, --version             Print version and exit
+  -u, --update              Check for updates via Homebrew
   -h, --help                Show this help message
 
 Examples:
@@ -79,6 +81,8 @@ func main() {
 	flag.BoolVar(&flags.Debug, "debug", false, "")
 	flag.BoolVar(&flags.Version, "v", false, "")
 	flag.BoolVar(&flags.Version, "version", false, "")
+	flag.BoolVar(&flags.Update, "u", false, "")
+	flag.BoolVar(&flags.Update, "update", false, "")
 	flag.BoolVar(&showHelp, "h", false, "")
 	flag.BoolVar(&showHelp, "help", false, "")
 	flag.Parse()
@@ -91,6 +95,14 @@ func main() {
 
 	if flags.Version {
 		fmt.Fprintln(stderr, "gogo", version)
+		os.Exit(0)
+	}
+
+	if flags.Update {
+		if err := update.Check(stderr, version); err != nil {
+			fmt.Fprintln(stderr, "update check error:", err)
+			os.Exit(1)
+		}
 		os.Exit(0)
 	}
 
